@@ -1,0 +1,170 @@
+---
+title: "Policing-Machine-Learning"
+author: "Robert Goss"
+date: "2024-02-02"
+output: pdf_document
+---
+
+## Fitting Models to Predict if Search Conducted
+
+These are out non-tree based models
+
+```{r pred, cache=TRUE}
+library(MASS)
+library(e1071)
+
+data.search <- data |> 
+  dplyr::select(hour, city, subject_age, subject_race, subject_sex, observation_of_suspected_contraband,
+         other_official_information, suspicious_movement, witness_observation,
+         informant_tip, search_conducted)
+
+data.search <- na.omit(data.search)
+data.search$search_conducted <- as.factor(data.search$search_conducted)
+
+n <- nrow(data.search)
+train.prop <- 0.7
+train.size <- ceiling(n*train.prop)
+test.size <- n-train.size
+
+foo <- sample(n,train.size)
+train.data <- data.search[foo,]
+test.data <- data.search[-foo,]
+
+lda.cv <- lda(search_conducted ~ .,data = train.data)
+nb.cv = naiveBayes(search_conducted ~ .,data = train.data)
+
+#qda.cv <- qda(search_conducted ~ .,data=train.data)
+#does not apply because these are mostly binary points
+#svm.cv <- svm(search_conducted ~ .,data=train.data)
+
+pred.lda <- predict(lda.cv, test.data)
+pred.nb <- predict(nb.cv, test.data)
+
+cat("LDA Misclassification Error Rate:", sum(test.data$search_conducted!=pred.lda$class)/nrow(test.data))
+cat("\nNB Misclassification Error Rate:", sum(test.data$search_conducted!=pred.nb)/nrow(test.data))
+```
+
+Tree-based Models
+
+```{r rf, cache=TRUE}
+library(ranger)
+library(rpart.plot)
+library(rpart)
+
+rf.cv <- ranger(search_conducted ~ ., data = train.data,
+                  mtry = 3,
+                importance = "impurity")
+plot(importance(rf.cv, mode= "impurity"))
+importance(rf.cv, mode = "impurity")
+
+tree.cv <- rpart(search_conducted ~ ., data = train.data,
+                 method = "class")
+rpart.plot(tree.cv)
+
+pred.rf <- predict(rf.cv, test.data)
+pred.tree <- predict(tree.cv, test.data, type = "class")
+
+cat("RF Misclassification Error Rate:",sum(test.data$search_conducted!=pred.rf$prediction)/nrow(test.data))
+cat("\nDT Misclassification Error Rate:",sum(test.data$search_conducted!=pred.tree)/nrow(test.data))
+
+table(test.data$search_conducted)
+table(pred.rf$predictions)
+table(pred.tree)
+```
+
+## Comparing the Models
+
+I used 4 models to predict if a search was conducted. To assess their accuracy in predicting if a search was conducted, I looked at their classification error rates. They were as follows:
+
+-   Linear Discriminant Analysis: 0.8%
+
+-   Naive Bayes: 1.0%
+
+-   Random Forest: 0.8%
+
+-   Decision Tree: 0.9%
+
+Note: QDA was attempted but could not be done due to the binary nature of much of this data. Additionally, SVM was extremely computationally taxing on my computer so I left it off in the analysis.
+
+As you can see, they all predicted if a search would be conducted very accurately. When looking at the importance of the variables in the RF model and the structure of the decision tree, we can see that when it comes to predicting if a search is conducted, it largely matters why the person was pulled over in the first place. When an officer decides to pull someone over, the reason why appears to matter much more than what happens once the interaction with the subject beings. For example, if somebody is pulled over for having suspected contraband, a search is extremely likely to be conducted. Factors such as age, race, and the time of day appear to have much less bearing on if a search is conducted.
+
+It is also worth noting that searches happen very infrequently, so I had to be sure to check to ensure the models were not simply just always predicting that a search did not happen. Since so few searches were conducted, this means that the error rate would still have been low but the model would not have been useful.
+
+## Fitting Models to Predict Outcomes
+
+Non-tree-based Models
+
+```{r outcomes, cache=TRUE}
+data.outcome <- data |> 
+  dplyr::select(hour, subject_age, subject_race,
+                subject_sex, outcome, contraband_found,
+                frisk_performed, search_conducted, search_person,
+                search_vehicle, search_basis, erratic_suspicious_behavior,
+                observation_of_suspected_contraband, other_official_information,
+                suspicious_movement, witness_observation, informant_tip)
+
+data.outcome <- na.omit(data.outcome)
+data.outcome$outcome <- as.factor(data.outcome$outcome)
+
+n2 <- nrow(data.outcome)
+train.prop <- 0.7
+train.size <- ceiling(n2*train.prop)
+test.size <- n2-train.size
+
+foo <- sample(n2,train.size)
+train.data.outcome <- data.outcome[foo,]
+test.data.outcome <- data.outcome[-foo,]
+
+lda.outcome.cv <- lda(outcome ~ .,data = train.data.outcome)
+nb.outcome.cv = naiveBayes(outcome ~ .,data = train.data.outcome)
+
+#qda does not apply because these are mostly binary points
+#svm was extremely computationally demanding and did not offer a significant reduction in misclassification error rate
+
+pred.lda.outcome <- predict(lda.outcome.cv, test.data.outcome)
+pred.nb.outcome <- predict(nb.outcome.cv, test.data.outcome)
+
+cat("LDA Misclassification Error Rate:",sum(test.data.outcome$outcome!=pred.lda.outcome$class)/nrow(test.data.outcome))
+cat("\nNB Misclassification Error Rate:",sum(test.data.outcome$outcome!=pred.nb.outcome)/nrow(test.data.outcome))
+```
+
+Tree-based Models
+
+```{r outcomes trees, cache=TRUE}
+rf.outcome.cv <- ranger(outcome ~ ., data = train.data.outcome,
+                  mtry = 4, importance = "impurity")
+plot(importance(rf.outcome.cv))
+importance(rf.outcome.cv)
+tree.cv.outcome <- rpart(outcome ~ ., data = train.data.outcome,
+                 method = "class")
+
+rpart.plot(tree.cv.outcome)
+
+pred.rf.outcome <- predict(rf.outcome.cv, test.data.outcome)
+pred.tree.outcome <- predict(tree.cv.outcome, test.data.outcome, type = "class")
+
+cat("RF Misclassification Error Rate:",sum(test.data.outcome$outcome!=pred.rf.outcome$predictions)/nrow(test.data.outcome))
+cat("\nDT Misclassification Error Rate:",sum(test.data.outcome$outcome!=pred.tree.outcome)/nrow(test.data))
+```
+
+When looking to predict the outcome of a traffic stop, we can see it is more difficult than when we are predicting if a search will take place or not. This may be because since searches are done so infrequently, it could be easier to predict them since it would take a specific set of criteria to conduct one. The outcome, however, has many more variables that fit into the decision of whether an officer issues a warning, gives a citation, or arrests the subject. We cannot take into account the officer's mood, the cooperation of the subject, or even variables such as if the subject had something such as a warrant with this data. With all of that being said, the models all correctly predicted more often than not the outcome of these traffic stops.
+
+## Comparing The Models Predicting Outcomes
+
+I once again used 4 models this time to predict the outcome of a traffic stop. To assess their accuracy in predicting if a search was conducted, I looked at their classification error rates. They were as follows:
+
+-   Linear Discriminant Analysis: 40%
+
+-   Naive Bayes: 40%
+
+-   Random Forest: 38%
+
+-   Decision Tree: 39%
+
+Note: QDA was attempted but could not be done due to the binary nature of much of this data. Additionally, SVM was extremely computationally taxing on my computer so I left it off in the analysis.
+
+As shown by the models, it is much more difficult to predict the outcomes of traffic stops than if there is a search or not. Since searches mainly relied on the reason for pulling someone over, it makes sense that predicting the outcome was much more difficult since this can largely rely on the interaction the officer and the subject have.
+
+When predicting the outcome, the RF model shows us that the time of day is extremely important. This is likely because as we saw earlier in our EDA, arrests are much more likely to happen at night than during the day, so traffic stops during the day are based more on determining if it will be a warning or citation. The reason someone was pulled over still had importance, but nowhere near the amount it did when attempting to predict if a search was conducted.
+
+All models performed similarly well, but the RF model always seemed to edge out the other models when I was running them with different training data sets. To expand on what I have done here, I would be interested in learning to better refine the models by exploring feature engineering and apply other models that I did not apply here. While it will be difficult to make a very accurate model using only the data I had to work with, it would be interesting to see how much these models could improve with a more refined approach.

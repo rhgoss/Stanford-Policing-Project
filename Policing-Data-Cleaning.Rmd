@@ -1,0 +1,88 @@
+---
+title: "Policing-Data-Cleaning"
+author: "Robert Goss"
+date: "2024-02-02"
+output: pdf_document
+---
+
+# Reading in, cleaning data
+
+```{r police cleaning}
+library(dplyr)
+library(tidyverse)
+library(lubridate)
+library(zoo)
+
+rm(list=ls())
+rawdata <- read_csv("nc_raleigh_2020_04_01.csv")
+
+# Removing data where there is no outcome specified. Since I am predicting outcome, data with NA's for this variable are of no use.
+rawdata <- rawdata[!is.na(rawdata$outcome), ]
+
+
+#Adjusting the location so we are left with the city
+# County does not change so it is dropped
+data <- rawdata |> 
+  separate(location, into = c("city", "county"), sep = ", ", remove = TRUE) |> 
+  select(raw_row_number, date, time, city, 
+         subject_age, subject_race, subject_sex, arrest_made, 
+         citation_issued, warning_issued, 
+         outcome, contraband_found, 
+         contraband_drugs, contraband_weapons, 
+         frisk_performed, search_conducted,
+         search_person, search_vehicle, 
+         search_basis, reason_for_search, 
+         reason_for_stop)
+data <- data |> 
+  mutate(city = as.factor(city),
+         reason_for_search = as.factor(reason_for_search))
+
+
+# The city variable has a lot of incorrect inputs. Here I am fixing this and standardizing city names and capitalization
+levels(data$city)[c(4,5)] <- levels(data$city)[6]
+levels(data$city)[c(5,6,7,9,10)] <- levels(data$city)[8]
+levels(data$city)[c(9)] <- levels(data$city)[8]
+levels(data$city)[c(1,2,3,6,7,9,10,11,12,13,14,15,16,22,23,24,25,26)] <- "OTHER"
+levels(data$city)[c(5,6,7,9)] <- levels(data$city)[8]
+
+
+# Creating var to show how many days are left in the month
+# Testing if cops actually do pull people over more later in the month to meet a quota
+data <- data |> 
+  mutate(days_until_month_end = as.numeric(difftime(ceiling_date(date, "month") - 1, date, units = "days")),
+         day = day(date),
+         month = month(date, label = TRUE),
+         year = year(date),
+         search_basis = if_else(search_conducted & is.na(search_basis), "Not Specified", search_basis),
+         reason_for_search = if_else(search_conducted & is.na(reason_for_search), "Not Specified", reason_for_search))
+
+
+# Filling NA values for various variables
+data$contraband_found[is.na(data$contraband_found)] <- "No Search"
+data$contraband_drugs[is.na(data$contraband_drugs)] <- "No Search"
+data$contraband_weapons[is.na(data$contraband_weapons)] <- "No Search"
+data$search_basis[is.na(data$search_basis)] <- "No Search"
+data$reason_for_search[is.na(data$reason_for_search)] <- "No Search"
+
+unique_reasons <- unique(unlist(strsplit(as.character(data$reason_for_search), "\\|")))
+
+# Creatings indicator columns
+data <- data |> 
+  mutate("erratic_suspicious_behavior" = grepl(unique_reasons[2], reason_for_search),
+         "observation_of_suspected_contraband" = grepl(unique_reasons[3], reason_for_search),
+         "other_official_information" = grepl(unique_reasons[4], reason_for_search),
+         "suspicious_movement" = grepl(unique_reasons[5], reason_for_search),
+         "witness_observation" = grepl(unique_reasons[6], reason_for_search),
+         "informant_tip" = grepl(unique_reasons[7], reason_for_search)) |> 
+  select(-reason_for_search)
+  
+head(data)
+```
+
+When I looked at the EDA later, I noticed the time of day appears to have a meaningful impact on the outcomes. We can see this because based on my EDA most arrests occur at night and early morning. I adjusted the time variable to group times together by the hour to better look at this. I am not overly concerned with rounding to the nearest hour, since rounding would not change the time of day in a significant way. 
+
+```{r hrs}
+data$hour <- hour(data$time)
+```
+
+

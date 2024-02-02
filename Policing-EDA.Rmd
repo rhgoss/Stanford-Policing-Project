@@ -1,0 +1,126 @@
+---
+title: "Policing-EDA"
+author: "Robert Goss"
+date: "2024-02-02"
+output: pdf_document
+---
+
+EDA to better understand the data I am working with
+
+```{r EDA}
+library(inspectdf)
+
+data |> 
+  inspect_cat()
+
+data |> 
+  inspect_cat() |> 
+  show_plot()
+
+search_data <- data |> 
+  filter(search_conducted == TRUE)
+
+search_data |> 
+  inspect_cat() |> 
+  show_plot()
+
+data |> 
+  select(date, subject_age,
+         days_until_month_end, day, month,
+         year) |> 
+  summary()
+
+search_data |> 
+  select(date, time, subject_age,
+         days_until_month_end, day, month,
+         year) |> 
+  summary()
+```
+
+# Plots to better understand the data set through visualization.
+
+```{r eda plots}
+library(ggplot2)
+
+ggplot(data = data, aes(x = subject_age)) + 
+  geom_histogram(fill = "gray", color = "black") +
+  labs(title = "Histogram of Subject Age", 
+       x = "Age", 
+       y = "Count") +
+  theme_classic()
+
+data <- data |> 
+  filter(subject_age < 95)
+
+
+ggplot(data = data, aes(x = month, fill = outcome)) + 
+  geom_bar(position = "dodge", color = "black") +
+  labs(title = "Outcomes of Traffic Stops by Month", 
+       x = "Month", 
+       y = "Count") +
+  theme_classic()
+
+ggplot(data = data, aes(x = year)) + 
+  geom_bar(position = "dodge", color = "black") +
+  labs(title = "Traffic Stops by Year", 
+       x = "Year", 
+       y = "Count") +
+  theme_classic()
+
+ggplot(data = data, aes(x = year, fill = outcome)) + 
+  geom_bar(position = "dodge", color = "black") +
+  labs(title = "Outcomes of Traffic Stops by Year", 
+       x = "Year", 
+       y = "Count") +
+  theme_classic()
+
+ggplot(data = data, aes(x = days_until_month_end, fill = outcome)) + 
+  geom_bar(position = "dodge", color = "black") +
+  labs(title = "Outcomes of Traffic Stops by Days Until the Month Ends", 
+       x = "Days Until Month End", 
+       y = "Count") +
+  theme_classic()
+
+ggplot(data = data, aes(x = time, color = outcome)) + 
+  geom_line(stat = "count", alpha = 0.5) +
+  labs(title = "Traffic Stops by Time of Day", 
+       x = "Time of Day", 
+       y = "Count") +
+  theme_classic()
+
+ggplot(data = data, aes(x = time, fill = outcome)) + 
+  geom_histogram(binwidth = 60, alpha = 0.5) +
+  labs(title = "Traffic Stops by Time of Day", 
+       x = "Time of Day", 
+       y = "Count") +
+  facet_wrap(~outcome) +
+  theme_classic()
+```
+
+## Some observations of note (whole data set):
+
+-   Arrests are made very infrequently, which could impact our models if they simply being choosing one outcome since it appears a vast majority of the time.
+
+-   Searches are also very infrequently conducted. Later, I will be creating models to predict both the outcome and if a search is conducted.
+
+-   Arrests appear to take place when it is dark rather than during the day. Predicting arrests will likely be easier than citations or warnings because those occur in similar patterns.
+
+-   The majority of traffic stops end in citations rather than warnings or arrests.
+
+-   The distribution of age shows that younger drivers more frequently have traffic stops occur. Additionally, there is invalid data that needs to be addressed unless someone aged 110 was actually getting pulled over.
+
+-   The time of day appears to have a meaningful impact on the outcomes. We can see this because most arrests occur at night and early morning.
+
+## Some observations of note when only looking at cases that result in searches:
+
+-   When a search is conducted it results in an arrest about half of the time.
+
+-   People are rarely let off with a warning.
+
+-   Searches most often occur because of erratic/suspicious movement or because of "other official information"
+
+-   Searches are done much more often on men than women, and on black people more than all other races combined.
+
+-   When a basis is given for a search, about half are because of probable cause and half are because consent is given. Generally, people are advised not to consent to a search regardless of if they habe something to hide or not. This may show people are not well aware of their rights societally.
+
+-   Over the years number of citations has gone down and the number of warnings has stayed steady or increased, with the number of arrests not changing a lot.
