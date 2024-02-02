@@ -14,9 +14,8 @@ library(MASS)
 library(e1071)
 
 data.search <- data |> 
-  dplyr::select(hour, city, subject_age, subject_race, subject_sex, observation_of_suspected_contraband,
-         other_official_information, suspicious_movement, witness_observation,
-         informant_tip, search_conducted)
+  dplyr::select(hour, subject_age, subject_race, 
+                subject_sex, reason_for_stop, search_conducted)
 
 data.search <- na.omit(data.search)
 data.search$search_conducted <- as.factor(data.search$search_conducted)
@@ -31,16 +30,18 @@ train.data <- data.search[foo,]
 test.data <- data.search[-foo,]
 
 lda.cv <- lda(search_conducted ~ .,data = train.data)
-nb.cv = naiveBayes(search_conducted ~ .,data = train.data)
+nb.cv <- naiveBayes(search_conducted ~ .,data = train.data)
+qda.cv <- qda(search_conducted ~ .,data=train.data)
 
-#qda.cv <- qda(search_conducted ~ .,data=train.data)
 #does not apply because these are mostly binary points
 #svm.cv <- svm(search_conducted ~ .,data=train.data)
 
 pred.lda <- predict(lda.cv, test.data)
+pred.qda <- predict(qda.cv, test.data)
 pred.nb <- predict(nb.cv, test.data)
 
 cat("LDA Misclassification Error Rate:", sum(test.data$search_conducted!=pred.lda$class)/nrow(test.data))
+cat("\nQDA Misclassification Error Rate:", sum(test.data$search_conducted!=pred.qda$class)/nrow(test.data))
 cat("\nNB Misclassification Error Rate:", sum(test.data$search_conducted!=pred.nb)/nrow(test.data))
 ```
 
@@ -76,17 +77,19 @@ table(pred.tree)
 
 I used 4 models to predict if a search was conducted. To assess their accuracy in predicting if a search was conducted, I looked at their classification error rates. They were as follows:
 
--   Linear Discriminant Analysis: 0.8%
+-   Linear Discriminant Analysis: 3.7%
 
--   Naive Bayes: 1.0%
+-   Quadratic Discriminant Analysis: 5.7%
 
--   Random Forest: 0.8%
+-   Naive Bayes: 3.7%
 
--   Decision Tree: 0.9%
+-   Random Forest: 3.7%
 
-Note: QDA was attempted but could not be done due to the binary nature of much of this data. Additionally, SVM was extremely computationally taxing on my computer so I left it off in the analysis.
+-   Decision Tree: 3.7%
 
-As you can see, they all predicted if a search would be conducted very accurately. When looking at the importance of the variables in the RF model and the structure of the decision tree, we can see that when it comes to predicting if a search is conducted, it largely matters why the person was pulled over in the first place. When an officer decides to pull someone over, the reason why appears to matter much more than what happens once the interaction with the subject beings. For example, if somebody is pulled over for having suspected contraband, a search is extremely likely to be conducted. Factors such as age, race, and the time of day appear to have much less bearing on if a search is conducted.
+Note: SVM was extremely computationally taxing on my computer so I left it off in the analysis.
+
+As you can see, they all predicted if a search would be conducted very accurately. When looking at the importance of the variables in the RF model and the structure of the decision tree, we can see that when it comes to predicting if a search is conducted, it largely matters why the person was pulled over in the first place. When an officer decides to pull someone over, the reason why appears to matter much more than what happens once the interaction with the subject beings. For example, if somebody is pulled over for a seatbelt violation, it likely will not end up in a search unless there are other factors that come into play.  Factors such as age, race, and the time of day appear to have much less bearing on if a search is conducted.
 
 It is also worth noting that searches happen very infrequently, so I had to be sure to check to ensure the models were not simply just always predicting that a search did not happen. Since so few searches were conducted, this means that the error rate would still have been low but the model would not have been useful.
 
@@ -101,7 +104,8 @@ data.outcome <- data |>
                 frisk_performed, search_conducted, search_person,
                 search_vehicle, search_basis, erratic_suspicious_behavior,
                 observation_of_suspected_contraband, other_official_information,
-                suspicious_movement, witness_observation, informant_tip)
+                suspicious_movement, witness_observation, 
+                informant_tip, reason_for_stop)
 
 data.outcome <- na.omit(data.outcome)
 data.outcome$outcome <- as.factor(data.outcome$outcome)
@@ -147,24 +151,24 @@ cat("RF Misclassification Error Rate:",sum(test.data.outcome$outcome!=pred.rf.ou
 cat("\nDT Misclassification Error Rate:",sum(test.data.outcome$outcome!=pred.tree.outcome)/nrow(test.data))
 ```
 
-When looking to predict the outcome of a traffic stop, we can see it is more difficult than when we are predicting if a search will take place or not. This may be because since searches are done so infrequently, it could be easier to predict them since it would take a specific set of criteria to conduct one. The outcome, however, has many more variables that fit into the decision of whether an officer issues a warning, gives a citation, or arrests the subject. We cannot take into account the officer's mood, the cooperation of the subject, or even variables such as if the subject had something such as a warrant with this data. With all of that being said, the models all correctly predicted more often than not the outcome of these traffic stops.
+When looking to predict the outcome of a traffic stop, we can see it is more difficult than when we are predicting if a search will take place or not. This may be because since searches are done so infrequently, it could be easier to predict them since it would take a specific set of criteria to conduct one. The outcome, however, has many more variables that fit into the decision of whether an officer issues a warning, gives a citation, or arrests the subject. We cannot take into account the officer's mood, the cooperation of the subject, or even variables such as if the subject had something such as a prior warrant with this data. With all of that being said, the models all correctly predicted the outcome of these traffic stops roughly two times for every 1 classification error.
 
 ## Comparing The Models Predicting Outcomes
 
 I once again used 4 models this time to predict the outcome of a traffic stop. To assess their accuracy in predicting if a search was conducted, I looked at their classification error rates. They were as follows:
 
--   Linear Discriminant Analysis: 40%
+-   Linear Discriminant Analysis: 33.6%
 
--   Naive Bayes: 40%
+-   Naive Bayes: 34.3%
 
--   Random Forest: 38%
+-   Random Forest: 33.2%
 
--   Decision Tree: 39%
+-   Decision Tree: 34.5%
 
-Note: QDA was attempted but could not be done due to the binary nature of much of this data. Additionally, SVM was extremely computationally taxing on my computer so I left it off in the analysis.
+Note: QDA was attempted but could not be done due to the binary nature of much of this data in the "arrests" outcome This comes from the binary indicators created to explore why a search was conducted. Additionally, SVM was extremely computationally taxing on my computer so I left it off in the analysis.
 
 As shown by the models, it is much more difficult to predict the outcomes of traffic stops than if there is a search or not. Since searches mainly relied on the reason for pulling someone over, it makes sense that predicting the outcome was much more difficult since this can largely rely on the interaction the officer and the subject have.
 
-When predicting the outcome, the RF model shows us that the time of day is extremely important. This is likely because as we saw earlier in our EDA, arrests are much more likely to happen at night than during the day, so traffic stops during the day are based more on determining if it will be a warning or citation. The reason someone was pulled over still had importance, but nowhere near the amount it did when attempting to predict if a search was conducted.
+When predicting the outcome, the RF model shows us that the reason someone was stopped and time of day are extremely important. Time is likely so important because as we saw earlier in our EDA, arrests are much more likely to happen at night than during the day, so traffic stops during the day are based more on determining if it will be a warning or citation. The reason someone was pulled over, however, still was most important. This could be because the officer likely has to respond a set way to different reasons for pulling someone over. If someone was barely speeding they may get a warning, but running red lights likely all require citations. 
 
 All models performed similarly well, but the RF model always seemed to edge out the other models when I was running them with different training data sets. To expand on what I have done here, I would be interested in learning to better refine the models by exploring feature engineering and apply other models that I did not apply here. While it will be difficult to make a very accurate model using only the data I had to work with, it would be interesting to see how much these models could improve with a more refined approach.
